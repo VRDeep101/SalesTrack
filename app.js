@@ -258,3 +258,33 @@ document.querySelector("#notesPad")?.addEventListener("input",e=>{state.notes=e.
 document.querySelector("#clearCalcLog")?.addEventListener("click",()=>{state.calcLog=[];save();renderCalcLog()});
 document.querySelectorAll("[data-calc]").forEach(b=>b.addEventListener("click",()=>{const v=b.dataset.calc;if(v==="clear"){calcExpr=""}else if(v==="back"){calcExpr=calcExpr.slice(0,-1)}else if(v==="="){const r=safeCalc(calcExpr);if(r!==null){addCalcLog(calcExpr,r);calcExpr=r}}else if(v==="%"){calcExpr+="/100"}else calcExpr+=v;calcRefresh()}));
 renderNotes();renderCalcLog();
+
+
+const legalModal=document.querySelector("#legalModal");
+const legalContent={
+ license:{
+  title:"MIT License",eyebrow:"OPEN SOURCE LICENSE",
+  html:`<h3>Copyright</h3><p>Copyright © 2026 <strong>Deep Lambhade</strong>.</p>
+  <h3>Permission</h3><p>TradeGrid is released as open-source software under the MIT License. Anyone may use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, subject to the license conditions.</p>
+  <h3>Condition</h3><p>The above copyright notice and this permission notice must be included in all copies or substantial portions of the software.</p>
+  <h3>Disclaimer</h3><p>THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. See the full <strong>LICENSE</strong> file included with the project for the complete legal text.</p>`
+ },
+ terms:{
+  title:"Terms & Conditions",eyebrow:"TERMS",
+  html:`<h3>1. Use</h3><p>TradeGrid may be used by individuals, students, traders, businesses, and developers for personal, educational, testing, or commercial purposes in accordance with its open-source license.</p>
+  <h3>2. Your data</h3><p>TradeGrid is designed to store dashboard data locally in your browser. You are responsible for maintaining your own backups and for protecting access to the device and browser profile where your data is stored.</p>
+  <h3>3. Financial information</h3><p>TradeGrid is a record-keeping and calculation tool. It is not financial, investment, tax, accounting, or legal advice. Verify important calculations and records independently.</p>
+  <h3>4. Software responsibility</h3><p>You use and modify the software at your own risk. The project is provided under the MIT License without warranties. Do not rely on it as the sole record for legally or financially significant information.</p>
+  <h3>5. Open-source use</h3><p>You may fork, modify, and redistribute TradeGrid as permitted by the MIT License. Preserve the required copyright and license notices.</p>`
+ },
+ privacy:{
+  title:"Privacy",eyebrow:"LOCAL-FIRST PRIVACY",
+  html:`<h3>Local storage</h3><p>TradeGrid's dashboard records are intended to remain in your browser's local storage. The app does not require a TradeGrid server or account for its core functionality.</p>
+  <h3>Your responsibility</h3><p>Clearing browser storage, using private browsing, uninstalling/resetting a browser profile, or changing devices can remove locally stored records. Export important data regularly.</p>
+  <h3>Third-party resources</h3><p>The starter interface may load the Inter font from Google Fonts when an internet connection is available. Apart from such explicitly included resources, the core dashboard does not need an external data service.</p>`
+ }
+};
+document.querySelectorAll("[data-legal]").forEach(btn=>btn.addEventListener("click",()=>{
+ const x=legalContent[btn.dataset.legal];document.querySelector("#legalEyebrow").textContent=x.eyebrow;document.querySelector("#legalTitle").textContent=x.title;document.querySelector("#legalBody").innerHTML=x.html;legalModal.showModal();
+}));
+document.querySelector("#closeLegal")?.addEventListener("click",()=>legalModal.close());

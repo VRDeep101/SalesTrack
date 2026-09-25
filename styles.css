@@ -52,3 +52,12 @@ html{scroll-snap-type:y mandatory}.dashboard{width:100%}.dashboard-section{min-h
 .status-banner.positive{border-color:color-mix(in srgb,var(--success) 45%,var(--line))}.status-banner.negative{border-color:color-mix(in srgb,var(--danger) 45%,var(--line))}
 @media(max-width:1050px){.dashboard-section{min-height:auto}.overview-grid,.analytics-grid,.ledger-grid,.ledger-footer,.tools-grid{grid-template-columns:1fr}.analytics-grid .chart-wrap{height:230px}}
 @media(max-width:700px){html{scroll-snap-type:none}.dashboard-section{padding:20px 0}.section-shell{width:calc(100% - 24px)}.hero,.section-banner{align-items:flex-start;flex-direction:column}.hero h1,.section-banner h1{font-size:21px}.metrics{grid-template-columns:1fr}.main-chart-wrap{height:230px}.topbar{height:auto;min-height:64px;padding:10px 14px}.brand span,.currency-control span,.live-clock span:last-child{display:none}}
+
+/* Legal footer */
+.site-footer{border-top:1px solid var(--line);background:var(--bg2);padding:24px clamp(18px,4vw,60px);color:var(--muted)}
+.footer-main{max-width:1460px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.footer-brand{display:flex;align-items:center;gap:10px}.footer-brand strong{display:block;color:var(--text);font-size:12px}.footer-brand span{display:block;font-size:9px;margin-top:3px}.footer-mark{width:30px;height:30px;font-size:12px}
+.footer-links{display:flex;gap:15px;flex-wrap:wrap}.footer-links button{border:0;background:none;color:var(--muted);font-size:10px;padding:4px}.footer-links button:hover{color:var(--text)}
+.footer-bottom{max-width:1460px;margin:18px auto 0;padding-top:13px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:15px;font-size:9px}
+.legal-body{padding:20px;max-height:65vh;overflow:auto;color:var(--muted);font-size:12px;line-height:1.7}.legal-body h3{color:var(--text);font-size:13px;margin:16px 0 6px}.legal-body h3:first-child{margin-top:0}.legal-body strong{color:var(--text)}
+@media(max-width:700px){.footer-main,.footer-bottom{align-items:flex-start;flex-direction:column}.footer-links{gap:8px}.footer-bottom{font-size:8px}}
