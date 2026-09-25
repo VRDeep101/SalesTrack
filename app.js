@@ -1,9 +1,32 @@
-const KEY="tradegrid-v1";
+const KEY="tradegrid-fresh-v12";
 const defaults={settings:{theme:"dark",currency:"INR",exchangeRate:83.5},accountBalance:{amount:0,lastUpdated:null,history:[]},transactions:[],sales:[],dailyChecklist:[],recurringTasks:[],notes:"",calcLog:[]};
 let state=read(),rangeDays=7;
+let undoStack=[],redoStack=[],lastSnapshot=JSON.stringify(state),restoring=false;
 
 function read(){try{return Object.assign(structuredClone(defaults),JSON.parse(localStorage.getItem(KEY)||"{}"))}catch{return structuredClone(defaults)}}
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function save(){
+  const next=JSON.stringify(state);
+  if(next===lastSnapshot)return;
+  if(!restoring){
+    undoStack.push(lastSnapshot);
+    if(undoStack.length>30)undoStack.shift();
+    redoStack=[];
+  }
+  localStorage.setItem(KEY,next);
+  lastSnapshot=next;
+  updateHistoryButtons();
+}
+function restoreSnapshot(snapshot){
+  restoring=true;
+  state=JSON.parse(snapshot);
+  localStorage.setItem(KEY,snapshot);
+  lastSnapshot=snapshot;
+  restoring=false;
+  render();drawAll();renderNotes();renderLog();updateHistoryButtons();updateHistoryButtons();
+}
+function undo(){if(!undoStack.length)return;const current=JSON.stringify(state);const previous=undoStack.pop();redoStack.push(current);restoreSnapshot(previous);toast("Undone")}
+function redo(){if(!redoStack.length)return;const current=JSON.stringify(state);const next=redoStack.pop();undoStack.push(current);restoreSnapshot(next);toast("Redone")}
+function updateHistoryButtons(){const u=$("#undoBtn"),r=$("#redoBtn");if(u)u.disabled=!undoStack.length;if(r)r.disabled=!redoStack.length}
 const $=s=>document.querySelector(s);
 const today=()=>new Date().toISOString().slice(0,10);
 const id=p=>p+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
@@ -36,13 +59,13 @@ function convertStoredAmounts(from,to){
   });
 }
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
-function toast(msg){const e=document.createElement("div");e.className="toast";e.textContent=msg;$("#toast-root").append(e);setTimeout(()=>e.remove(),2200)}
+function toast(msg){const root=$("#toast-root")||document.body;const e=document.createElement("div");e.className="toast";e.textContent=msg;root.append(e);setTimeout(()=>e.remove(),2200)}
 
 function applyTheme(){$("html").classList.toggle("light",state.settings.theme==="light");$("#themeBtn").textContent=state.settings.theme==="dark"?"☼":"☾"}
 applyTheme();
 $("#currency").value=state.settings.currency;
 $("#today").textContent=new Date().toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"});
-$("#themeBtn").onclick=()=>{state.settings.theme=state.settings.theme==="dark"?"light":"dark";save();applyTheme();drawAll()};
+$("#themeBtn").onclick=()=>{state.settings.theme=state.settings.theme==="dark"?"light":"dark";const snap=JSON.stringify(state);localStorage.setItem(KEY,snap);lastSnapshot=snap;applyTheme();drawAll()};
 $("#currency").onchange=e=>{
   const next=e.target.value;
   const previous=state.settings.currency||"INR";
@@ -55,6 +78,8 @@ $("#currency").onchange=e=>{
     toast("All amounts switched to "+currencyName());
   }
 };
+$("#undoBtn").onclick=undo;$("#redoBtn").onclick=redo;
+document.addEventListener("keydown",e=>{if(!(e.ctrlKey||e.metaKey))return;if(e.key.toLowerCase()==="z"){e.preventDefault();e.shiftKey?redo():undo()}else if(e.key.toLowerCase()==="y"){e.preventDefault();redo()}});
 
 function dayRows(){
   const dates=rangeDays==="all"
@@ -107,7 +132,14 @@ function renderTransactions(){
   $("#txTable").innerHTML=rows.slice(0,8).map(x=>`<tr><td>${esc(x.time)}</td><td><span class="type ${x.type}">${x.type}</span></td><td>${esc(x.category)}</td><td>${esc(x.description||"")}</td><td>${money(x.amount)}</td><td><button class="row-btn" data-tx="${x.id}">×</button></td></tr>`).join("");
   $("#txEmpty").style.display=rows.length?"none":"block";
 }
-$("#txTable").onclick=e=>{const b=e.target.closest("[data-tx]");if(!b)return;state.transactions=state.transactions.filter(x=>x.id!==b.dataset.tx);save();render();drawAll();toast("Transaction deleted")};
+$("#txTable").onclick=e=>{
+ const b=e.target.closest("[data-tx]");if(!b)return;
+ const tx=state.transactions.find(x=>x.id===b.dataset.tx);if(!tx)return;
+ state.transactions=state.transactions.filter(x=>x.id!==b.dataset.tx);
+ state.accountBalance.amount+=tx.type==="income"?-Number(tx.amount):Number(tx.amount);
+ state.accountBalance.lastUpdated=new Date().toISOString();
+ save();render();drawAll();toast("Transaction deleted and balance restored");
+};
 
 function renderRecurring(){
   const el=$("#recurring");
@@ -159,13 +191,79 @@ $("#newSale").onclick=()=>formModal("Add sale","SALES",[
 $("#newRecurring").onclick=()=>formModal("Add recurring task","SCHEDULE",[
  {label:"Task",input:'<input name="name" required>'},{label:"Frequency",input:'<select name="frequency"><option>daily</option><option>weekly</option><option>monthly</option></select>'},{label:"Next date",input:`<input name="date" type="date" value="${today()}" required>`}],fd=>{state.recurringTasks.push({id:id("rec"),taskName:fd.get("name"),frequency:fd.get("frequency"),nextDate:fd.get("date"),daysCompleted:[]});save();renderRecurring();toast("Task scheduled")});
 
-function setupCanvas(c){const r=c.getBoundingClientRect(),d=devicePixelRatio||1;c.width=Math.max(1,r.width*d);c.height=Math.max(1,r.height*d);const ctx=c.getContext("2d");ctx.setTransform(d,0,0,d,0,0);return[ctx,r.width,r.height]}
+function setupCanvas(c){
+  const r=c.getBoundingClientRect();
+  const d=Math.max(1,window.devicePixelRatio||1);
+  const w=Math.max(1,Math.floor(r.width));
+  const h=Math.max(1,Math.floor(r.height));
+  c.width=w*d;
+  c.height=h*d;
+  c.style.width=w+"px";
+  c.style.height=h+"px";
+  const ctx=c.getContext("2d");
+  ctx.setTransform(d,0,0,d,0,0);
+  return[ctx,w,h];
+}
 function grid(ctx,w,h){ctx.strokeStyle=css("--line");ctx.lineWidth=1;for(let i=0;i<4;i++){const y=12+i*(h-38)/3;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}}
-function plot(canvasId,vals,color){const [c,w,h]=setupCanvas($("#"+canvasId));c.clearRect(0,0,w,h);grid(c,w,h);if(!vals.length)return;let max=Math.max(...vals.map(x=>x.v),1),min=Math.min(...vals.map(x=>x.v),0),span=max-min||1;const pts=vals.map((x,i)=>({x:16+i*(w-32)/Math.max(vals.length-1,1),y:12+(max-x.v)/span*(h-38)}));c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=color;c.lineWidth=2;c.stroke();pts.forEach((p,i)=>{if(i%Math.max(1,Math.ceil(vals.length/8))===0||i===pts.length-1){c.beginPath();c.arc(p.x,p.y,3,0,Math.PI*2);c.fillStyle=color;c.fill();c.fillStyle=css("--muted");c.font="8px Inter";c.fillText(vals[i].label,p.x-10,h-6)}})}
+function plot(canvasId,vals,color){
+  const [c,w,h]=setupCanvas($("#"+canvasId));
+  c.clearRect(0,0,w,h);
+  grid(c,w,h);
+  if(!vals.length)return;
+  let max=Math.max(...vals.map(x=>x.v),0);
+  let min=Math.min(...vals.map(x=>x.v),0);
+  if(max===min){max+=1;min-=1}
+  const span=max-min;
+  const pts=vals.map((x,i)=>({x:16+i*(w-32)/Math.max(vals.length-1,1),y:12+(max-x.v)/span*(h-38)}));
+  c.beginPath();
+  pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));
+  c.strokeStyle=color;c.lineWidth=1.7;c.lineJoin="round";c.lineCap="round";c.stroke();
+  pts.forEach((p,i)=>{
+    if(i%Math.max(1,Math.ceil(vals.length/7))===0||i===pts.length-1){
+      c.beginPath();c.arc(p.x,p.y,2.5,0,Math.PI*2);c.fillStyle=color;c.fill();
+      c.fillStyle=css("--muted");c.font="7px Inter";c.textAlign="center";c.fillText(vals[i].label,p.x,h-4);
+    }
+  });
+}
 function drawProfit(){const ds=days(7),vals=ds.map(x=>day(x).profit),max=Math.max(...vals,1),min=Math.min(...vals,-1),span=max-min||1,[c,w,h]=setupCanvas($("#profitChart"));c.clearRect(0,0,w,h);grid(c,w,h);const pts=vals.map((v,i)=>({x:16+i*(w-32)/6,y:12+(max-v)/span*(h-38)}));c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=css("--white");c.lineWidth=1.7;c.stroke();pts.forEach((p,i)=>{c.beginPath();c.arc(p.x,p.y,4,0,7);c.fillStyle=vals[i]>=0?css("--green"):css("--red");c.fill();c.fillStyle=css("--muted");c.font="8px Inter";c.fillText(ds[i].slice(5),p.x-11,h-6)})}
-function drawBalance(){let rows=dayRows(),cur=state.accountBalance.amount-rows.reduce((a,r)=>a+r.incoming-r.expense,0),vals=[];rows.forEach(r=>{cur+=r.incoming-r.expense;vals.push({v:cur,label:r.date.slice(5)})});plot("balanceChart",vals,css("--white"))}
-function drawCash(){const rows=dayRows(),[c,w,h]=setupCanvas($("#cashChart"));c.clearRect(0,0,w,h);grid(c,w,h);const max=Math.max(...rows.map(r=>Math.max(r.incoming+r.revenue,r.expense)),1),step=(w-24)/Math.max(rows.length,1),bw=Math.max(3,Math.min(11,step*.3));rows.forEach((r,i)=>{const x=12+i*step,inc=(r.incoming+r.revenue)/max*(h-38),exp=r.expense/max*(h-38);c.fillStyle=css("--green");c.fillRect(x,h-25-inc,bw,inc);c.fillStyle=css("--red");c.fillRect(x+bw+2,h-25-exp,bw,exp)})}
-function drawCharts(){drawProfit();const rows=dayRows();plot("balanceChart",rows.map((r,i)=>({v:0,label:r.date.slice(5)})),css("--white"));drawBalance();drawCash();plot("marginChart",rows.map(r=>({v:r.margin,label:r.date.slice(5)})),css("--green"));plot("activityChart",rows.map(r=>({v:r.activity,label:r.date.slice(5)})),css("--white"))}
+function drawBalance(){
+  const rows=days(7).map(day);
+  let cur=Number(state.accountBalance.amount)||0;
+  const changes=rows.reduce((sum,r)=>sum+r.incoming-r.expense,0);
+  cur-=changes;
+  const vals=[];
+  rows.forEach(r=>{
+    cur+=r.incoming-r.expense;
+    vals.push({v:cur,label:r.date.slice(5)});
+  });
+  plot("balanceChart",vals,css("--white"));
+}
+function drawCash(){
+  const rows=days(7).map(day),[c,w,h]=setupCanvas($("#cashChart"));
+  c.clearRect(0,0,w,h);grid(c,w,h);
+  const max=Math.max(...rows.map(r=>Math.max(r.incoming+r.revenue,r.expense)),1);
+  const step=(w-24)/Math.max(rows.length,1);
+  const bw=Math.max(3,Math.min(9,step*.25));
+  rows.forEach((r,i)=>{
+    const x=12+i*step;
+    const inc=(r.incoming+r.revenue)/max*(h-34);
+    const exp=r.expense/max*(h-34);
+    c.fillStyle=css("--green");c.fillRect(x,h-23-inc,bw,inc);
+    c.fillStyle=css("--red");c.fillRect(x+bw+2,h-23-exp,bw,exp);
+    if(i%Math.max(1,Math.ceil(rows.length/7))===0||i===rows.length-1){
+      c.fillStyle=css("--muted");c.font="7px Inter";c.textAlign="center";c.fillText(r.date.slice(5),x+bw,h-3);
+    }
+  });
+}
+function drawCharts(){
+  drawProfit();
+  const rows=days(7).map(day);
+  plot("balanceChart",rows.map(r=>({v:r.balance??0,label:r.date.slice(5)})),css("--white"));
+  drawBalance();
+  drawCash();
+  plot("marginChart",rows.map(r=>({v:r.margin,label:r.date.slice(5)})),css("--green"));
+  plot("activityChart",rows.map(r=>({v:r.activity,label:r.date.slice(5)})),css("--white"));
+}
 function drawAll(){drawCharts()}
 
 $("#range").onclick=e=>{const b=e.target.closest("button");if(!b)return;document.querySelectorAll("#range button").forEach(x=>x.classList.remove("active"));b.classList.add("active");rangeDays=b.dataset.days==="all"?"all":Number(b.dataset.days);drawAll()};
@@ -188,8 +286,8 @@ function renderLog(){$("#calcLog").innerHTML=state.calcLog.length?state.calcLog.
 $("#notes").oninput=e=>{state.notes=e.target.value;save()};$("#clearLog").onclick=()=>{state.calcLog=[];save();renderLog()};
 
 $("#csv").onclick=()=>{const rows=[["Date","Time","Type","Category","Description","Amount"],...state.transactions.map(x=>[x.date,x.time,x.type,x.category,x.description,x.amount])];const text=rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=`tradegrid-${today()}.csv`;a.click();URL.revokeObjectURL(a.href)};
-$("#print").onclick=()=>window.print();
-$("#clear").onclick=()=>{if(confirm("Clear all TradeGrid data? This cannot be undone.")){localStorage.removeItem(KEY);state=read();render();drawAll()}};
+$("#print").onclick=()=>window.print();$("#reportAgain").onclick=()=>window.print();$("#csvAgain").onclick=()=>$("#csv").click();
+$("#clear").onclick=()=>{if(confirm("Clear all TradeGrid data? This cannot be undone.")){localStorage.removeItem(KEY);state=read();undoStack=[];redoStack=[];lastSnapshot=JSON.stringify(state);render();drawAll();updateHistoryButtons();toast("Fresh workspace created")}};
 
 function tick(){const d=new Date();$("#clock").textContent=d.toLocaleTimeString("en-IN",{hour12:false});$("#date").textContent=d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
 setInterval(tick,1000);tick();

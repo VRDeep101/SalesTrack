@@ -1,174 +1,100 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TradeGrid</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradeGrid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <div class="brand-logo">T</div>
-    <div><strong>TradeGrid</strong><small>Finance workspace</small></div>
-  </div>
+  <div class="brand"><div class="brand-logo">T</div><div><strong>TradeGrid</strong><small>Finance workspace</small></div></div>
   <div class="topbar-right">
     <div class="clock"><span class="live"></span><b id="clock">--:--:--</b><span id="date"></span></div>
-    <button class="square-btn" id="themeBtn" title="Change theme">☾</button>
-    <select id="currency" class="currency" title="All balance, income, expense and sales amounts use this currency">
-      <option value="INR">₹ INR</option>
-      <option value="USD">$ USD</option>
-    </select>
+    <div class="history-actions"><button class="square-btn" id="undoBtn" title="Undo" disabled>↶</button><button class="square-btn" id="redoBtn" title="Redo" disabled>↷</button></div><button class="square-btn" id="themeBtn">☾</button>
+    <select id="currency" class="currency" title="All amounts use this currency"><option value="INR">₹ INR</option><option value="USD">$ USD</option></select>
   </div>
 </header>
 
 <main class="page">
-  <section class="screen first-screen">
-    <div class="screen-inner">
-      <div class="intro">
-        <div>
-          <span class="eyebrow">TODAY · <span id="today"></span></span>
-          <h1>Good morning. Trade smart.</h1>
-          <p>Your money, trades and tasks in one place.</p>
-        </div>
-        <button class="btn btn-solid" id="newTx">+ Transaction</button>
-      </div>
-
-      <div class="metric-row">
-        <article class="metric clickable" id="balanceCard">
-          <div class="metric-label">CURRENT BALANCE <b>◉ <span id="balanceCurrency">₹</span></b></div>
-          <div class="metric-number" id="balance">₹0.00</div>
-          <div class="metric-bottom"><span id="balanceHint">Set starting balance</span><span class="plus">+</span></div>
-        </article>
-        <article class="metric">
-          <div class="metric-label">TODAY'S INCOME <b class="green-text">↗</b></div>
-          <div class="metric-number green-text" id="income">₹0.00</div>
-          <div class="metric-bottom">Sales + income entries</div>
-        </article>
-        <article class="metric">
-          <div class="metric-label">TODAY'S EXPENSE <b class="red-text">↘</b></div>
-          <div class="metric-number red-text" id="expense">₹0.00</div>
-          <div class="metric-bottom">Daily spending</div>
-        </article>
-      </div>
-
-      <div class="profit-bar" id="profitBar">
-        <div><span>NET PROFIT TODAY</span><strong id="profit">₹0.00</strong></div>
-        <b id="profitStatus">○ Break Even</b>
-      </div>
-
-      <div class="top-grid">
-        <section class="panel large-panel">
-          <div class="panel-title">
-            <div><span class="eyebrow">PERFORMANCE</span><h2>Profit / loss</h2></div>
-            <div class="legend"><span><i class="green-dot"></i>Profit</span><span><i class="red-dot"></i>Loss</span></div>
-          </div>
-          <div class="chart"><canvas id="profitChart"></canvas></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">
-            <div><span class="eyebrow">TODAY</span><h2>Checklist</h2></div>
-            <span class="counter" id="taskCount">0/0</span>
-          </div>
-          <div class="progress"><i id="taskProgress"></i></div>
-          <div class="task-entry"><input id="taskInput" placeholder="Add a task"><button class="square-btn" id="addTask">+</button></div>
-          <div id="tasks" class="tasks"></div>
-        </section>
-      </div>
+<section class="dashboard-screen">
+  <div class="dashboard-inner">
+    <div class="intro">
+      <div><span class="eyebrow">TODAY · <span id="today"></span></span><h1>Good morning. Trade smart.</h1><p>Your money, trades and tasks in one place.</p></div>
+      <button class="btn btn-solid" id="newTx">+ Transaction</button>
     </div>
-  </section>
 
-  <section class="screen">
-    <div class="screen-inner">
-      <div class="section-head-wide">
-        <div><span class="eyebrow">ANALYTICS</span><h1>Trading performance</h1><p>Use the range buttons to look through saved history.</p></div>
-        <div class="range" id="range"><button data-days="7" class="active">7D</button><button data-days="30">30D</button><button data-days="90">90D</button><button data-days="all">ALL</button></div>
-      </div>
-      <div class="chart-grid">
-        <section class="panel"><div class="panel-title"><div><span class="eyebrow">EQUITY</span><h2>Balance curve</h2></div></div><div class="chart"><canvas id="balanceChart"></canvas></div></section>
-        <section class="panel"><div class="panel-title"><div><span class="eyebrow">CASH FLOW</span><h2>Income vs expense</h2></div></div><div class="chart"><canvas id="cashChart"></canvas></div></section>
-        <section class="panel"><div class="panel-title"><div><span class="eyebrow">MARGIN</span><h2>Profit margin</h2></div></div><div class="chart"><canvas id="marginChart"></canvas></div></section>
-        <section class="panel"><div class="panel-title"><div><span class="eyebrow">ACTIVITY</span><h2>Trading activity</h2></div></div><div class="chart"><canvas id="activityChart"></canvas></div></section>
-      </div>
+    <div class="metric-row">
+      <article class="metric clickable" id="balanceCard"><div class="metric-label">CURRENT BALANCE <b>◉ <span id="balanceCurrency">₹</span></b></div><div class="metric-number" id="balance">₹0.00</div><div class="metric-bottom"><span id="balanceHint">Set starting balance</span><span class="plus">+</span></div></article>
+      <article class="metric"><div class="metric-label">TODAY'S INCOME <b class="green-text">↗</b></div><div class="metric-number green-text" id="income">₹0.00</div><div class="metric-bottom">Sales + income entries</div></article>
+      <article class="metric"><div class="metric-label">TODAY'S EXPENSE <b class="red-text">↘</b></div><div class="metric-number red-text" id="expense">₹0.00</div><div class="metric-bottom">Daily spending</div></article>
     </div>
-  </section>
 
-  <section class="screen">
-    <div class="screen-inner">
-      <div class="section-head-wide">
-        <div><span class="eyebrow">LEDGER</span><h1>Sales & cash movement</h1><p>Sales stay separate; expenses affect your current balance.</p></div>
-        <div class="actions"><button class="btn" id="newSale">+ Sale</button><button class="btn btn-solid" id="csv">Export CSV</button></div>
-      </div>
+    <div class="profit-bar" id="profitBar"><div><span>NET PROFIT TODAY</span><strong id="profit">₹0.00</strong></div><b id="profitStatus">○ Break Even</b></div>
 
-      <div class="tables">
-        <section class="panel table-panel">
-          <div class="panel-title"><div><span class="eyebrow">SALES</span><h2>Recent sales</h2></div></div>
-          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Item</th><th>Cost</th><th>Sell</th><th>Qty</th><th>Profit</th><th>Margin</th><th></th></tr></thead><tbody id="salesTable"></tbody></table></div>
-          <div class="empty" id="salesEmpty">No sales yet.</div>
-        </section>
+    <div class="main-grid">
+      <section class="panel main-performance">
+        <div class="panel-title"><div><span class="eyebrow">PERFORMANCE</span><h2>Profit / loss</h2></div><div class="legend"><span><i class="green-dot"></i>Profit</span><span><i class="red-dot"></i>Loss</span></div></div>
+        <div class="chart main-chart"><canvas id="profitChart"></canvas></div>
+      </section>
 
-        <section class="panel table-panel">
-          <div class="panel-title"><div><span class="eyebrow">CASH</span><h2>Recent transactions</h2></div></div>
-          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th></th></tr></thead><tbody id="txTable"></tbody></table></div>
-          <div class="empty" id="txEmpty">No transactions yet.</div>
-        </section>
-      </div>
+      <section class="panel checklist-panel">
+        <div class="panel-title"><div><span class="eyebrow">TODAY</span><h2>Checklist</h2></div><span class="counter" id="taskCount">0/0</span></div>
+        <div class="progress"><i id="taskProgress"></i></div>
+        <div class="task-entry"><input id="taskInput" placeholder="Add a task"><button class="square-btn" id="addTask">+</button></div>
+        <div id="tasks" class="tasks"></div>
+      </section>
 
-      <div class="bottom-row">
-        <section class="panel">
-          <div class="panel-title"><div><span class="eyebrow">SCHEDULE</span><h2>Recurring tasks</h2></div><button class="btn small" id="newRecurring">+ Add</button></div>
-          <div id="recurring"></div>
-        </section>
-        <section class="panel">
-          <div class="panel-title"><div><span class="eyebrow">DATA</span><h2>Controls</h2></div></div>
-          <p class="note">Everything is stored in this browser. Export your CSV if you want a backup.</p>
-          <div class="actions"><button class="btn" id="print">Print / PDF</button><button class="btn danger" id="clear">Clear data</button></div>
-        </section>
-      </div>
+      <section class="panel mini-chart"><div class="panel-title"><div><span class="eyebrow">EQUITY</span><h2>Balance curve</h2></div></div><div class="chart"><canvas id="balanceChart"></canvas></div></section>
+      <section class="panel mini-chart"><div class="panel-title"><div><span class="eyebrow">CASH FLOW</span><h2>Income / expense</h2></div></div><div class="chart"><canvas id="cashChart"></canvas></div></section>
+      <section class="panel mini-chart"><div class="panel-title"><div><span class="eyebrow">MARGIN</span><h2>Profit margin</h2></div></div><div class="chart"><canvas id="marginChart"></canvas></div></section>
+      <section class="panel mini-chart"><div class="panel-title"><div><span class="eyebrow">ACTIVITY</span><h2>Trading activity</h2></div></div><div class="chart"><canvas id="activityChart"></canvas></div></section>
     </div>
-  </section>
 
-  <section class="screen tools-screen">
-    <div class="screen-inner">
-      <div class="section-head-wide">
-        <div><span class="eyebrow">TRADING TOOLS</span><h1>Notes & calculator</h1><p>Quick calculations are logged beside your notes.</p></div>
-      </div>
-      <div class="tools">
-        <section class="panel notes">
-          <div class="panel-title"><div><span class="eyebrow">NOTE PAD</span><h2>Trade notes</h2></div><span class="tag">Auto saved</span></div>
-          <textarea id="notes" placeholder="Write a setup, expense note, idea or reminder..."></textarea>
-          <div class="log-title"><span>CALCULATION LOG</span><button id="clearLog">Clear</button></div>
-          <div id="calcLog" class="calc-log"></div>
-        </section>
-
-        <section class="panel calculator">
-          <div class="panel-title"><div><span class="eyebrow">CALCULATOR</span><h2>Quick calculation</h2></div></div>
-          <div class="calc-screen"><div id="calcExpression">0</div><strong id="calcResult">0</strong></div>
-          <div class="keys" id="keys">
-            <button data-key="clear" class="muted-key">C</button><button data-key="back" class="muted-key">⌫</button><button data-key="percent" class="muted-key">%</button><button data-key="/" class="operator">÷</button>
-            <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button data-key="*" class="operator">×</button>
-            <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button><button data-key="-" class="operator">−</button>
-            <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button data-key="+" class="operator">+</button>
-            <button data-key="0" class="zero">0</button><button data-key=".">.</button><button data-key="equals" class="equals">=</button>
-          </div>
-        </section>
-      </div>
+    <div class="history-head">
+      <div><span class="eyebrow">HISTORY</span><b>Saved records</b></div>
+      <div class="range" id="range"><button data-days="7" class="active">7D</button><button data-days="30">30D</button><button data-days="90">90D</button><button data-days="all">ALL</button></div>
     </div>
-  </section>
+
+    <div class="ledger-grid">
+      <section class="panel compact-ledger"><div class="panel-title"><div><span class="eyebrow">SALES</span><h2>Recent sales</h2></div><button class="btn small" id="newSale">+ Sale</button></div><div class="table-wrap"><table><thead><tr><th>DATE</th><th>ITEM</th><th>COST</th><th>SELL</th><th>QTY</th><th>PROFIT</th><th></th></tr></thead><tbody id="salesTable"></tbody></table></div><div class="empty" id="salesEmpty">No sales yet.</div></section>
+
+      <section class="panel compact-ledger"><div class="panel-title"><div><span class="eyebrow">CASH</span><h2>Transactions</h2></div><button class="btn small" id="newRecurring">+ Schedule</button></div><div class="table-wrap"><table><thead><tr><th>TIME</th><th>TYPE</th><th>CATEGORY</th><th>DESCRIPTION</th><th>AMOUNT</th><th></th></tr></thead><tbody id="txTable"></tbody></table></div><div class="empty" id="txEmpty">No transactions yet.</div></section>
+    </div>
+  </div>
+</section>
+
+<section class="tools-screen">
+  <div class="tools-inner">
+    <div class="tools-head"><div><span class="eyebrow">TRADING TOOLS</span><h1>Notes & calculator</h1><p>Everything on this screen is saved locally in your browser.</p></div><div class="actions"><button class="btn" id="csv">Download CSV</button><button class="btn" id="print">Print / Save PDF</button><button class="btn danger" id="clear">Clear data</button></div></div>
+
+    <div class="tools-grid">
+      <section class="panel notes"><div class="panel-title"><div><span class="eyebrow">NOTE PAD</span><h2>Trade notes</h2></div><span class="tag">Auto saved</span></div><textarea id="notes" placeholder="Write a setup, expense note, idea or reminder..."></textarea><div class="log-title"><span>CALCULATION LOG</span><button id="clearLog">Clear</button></div><div id="calcLog" class="calc-log"></div></section>
+
+      <section class="panel calculator"><div class="panel-title"><div><span class="eyebrow">CALCULATOR</span><h2>Quick calculation</h2></div></div><div class="calc-screen"><div id="calcExpression">0</div><strong id="calcResult">0</strong></div><div class="keys" id="keys">
+        <button data-key="clear" class="muted-key">C</button><button data-key="back" class="muted-key">⌫</button><button data-key="percent" class="muted-key">%</button><button data-key="/" class="operator">÷</button>
+        <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button data-key="*" class="operator">×</button>
+        <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button><button data-key="-" class="operator">−</button>
+        <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button data-key="+" class="operator">+</button>
+        <button data-key="0" class="zero">0</button><button data-key=".">.</button><button data-key="equals" class="equals">=</button>
+      </div></section>
+    </div>
+
+    <div class="utility-row">
+      <section class="panel"><div class="panel-title"><div><span class="eyebrow">SCHEDULE</span><h2>Recurring tasks</h2></div></div><div id="recurring"></div></section>
+      <section class="panel"><div class="panel-title"><div><span class="eyebrow">REPORT</span><h2>Backup & report</h2></div></div><p class="note">CSV keeps your transaction data. Print / Save PDF creates a browser-ready report.</p><div class="actions"><button class="btn" id="reportAgain">Print / Save PDF</button><button class="btn btn-solid" id="csvAgain">Download CSV</button></div></section>
+    </div>
+  </div>
+</section>
 </main>
 
-<footer class="footer">
-  <div><strong>TradeGrid</strong><span>Local-first finance workspace</span></div>
-  <nav><button data-legal="license">License</button><button data-legal="terms">Terms</button><button data-legal="privacy">Privacy</button></nav>
-  <small>© 2026 Deep Lambhade · Open source under MIT License</small>
-</footer>
+<footer class="footer"><div><strong>TradeGrid</strong><span>Local-first finance workspace</span></div><nav><button data-legal="license">License</button><button data-legal="terms">Terms</button><button data-legal="privacy">Privacy</button></nav><small>© 2026 Deep Lambhade · Open source under MIT License</small></footer>
 
 <dialog id="modal"><div class="modal-head"><div><span class="eyebrow" id="modalEyebrow">ENTRY</span><h2 id="modalTitle"></h2></div><button class="square-btn" id="closeModal">×</button></div><form id="form"></form></dialog>
 <dialog id="legal"><div class="modal-head"><div><span class="eyebrow">LEGAL</span><h2 id="legalTitle"></h2></div><button class="square-btn" id="closeLegal">×</button></div><div id="legalBody" class="legal-body"></div></dialog>
 <script src="app.js"></script>
-</body>
+<div id="toast-root"></div></body>
 </html>
