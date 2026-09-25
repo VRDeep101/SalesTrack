@@ -1,290 +1,162 @@
-const KEY = "tradegrid-v1";
-const today = () => new Date().toISOString().slice(0,10);
-const uid = p => `${p}_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-const defaultState = {
-  settings:{theme:"dark",currency:"USD",exchangeRate:83.5},
-  accountBalance:{amount:0,lastUpdated:null,history:[]},
-  transactions:[],
-  sales:[],
-  dailyChecklist:[],
-  recurringTasks:[]
-};
-let state = load();
+const KEY="tradegrid-v1";
+const defaults={settings:{theme:"dark",currency:"INR",exchangeRate:83.5},accountBalance:{amount:0,lastUpdated:null,history:[]},transactions:[],sales:[],dailyChecklist:[],recurringTasks:[],notes:"",calcLog:[]};
+let state=read(),rangeDays=7;
 
-function load(){
-  try { return {...defaultState,...JSON.parse(localStorage.getItem(KEY)||"{}")}; }
-  catch { return structuredClone(defaultState); }
-}
-function save(){ localStorage.setItem(KEY,JSON.stringify(state)); }
-function money(v){
-  const n = Number(v)||0, x = state.settings.currency==="INR" ? n*state.settings.exchangeRate : n;
-  return new Intl.NumberFormat(state.settings.currency==="INR"?"en-IN":"en-US",{style:"currency",currency:state.settings.currency,maximumFractionDigits:2}).format(x);
-}
-function rawMoney(v){ return state.settings.currency==="INR" ? (Number(v)*state.settings.exchangeRate) : Number(v); }
-function toast(msg){const el=document.createElement("div");el.className="toast";el.textContent=msg;document.querySelector("#toast-root").append(el);setTimeout(()=>el.remove(),2400)}
-function escape(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function read(){try{return Object.assign(structuredClone(defaults),JSON.parse(localStorage.getItem(KEY)||"{}"))}catch{return structuredClone(defaults)}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+const $=s=>document.querySelector(s);
+const today=()=>new Date().toISOString().slice(0,10);
+const id=p=>p+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+function money(v){const n=Number(v)||0;const value=state.settings.currency==="INR"?n*state.settings.exchangeRate:n;return new Intl.NumberFormat(state.settings.currency==="INR"?"en-IN":"en-US",{style:"currency",currency:state.settings.currency,maximumFractionDigits:2}).format(value)}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function toast(msg){const e=document.createElement("div");e.className="toast";e.textContent=msg;$("#toast-root").append(e);setTimeout(()=>e.remove(),2200)}
 
-const $ = s => document.querySelector(s);
-$("#todayLabel").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"});
-$("#themeToggle").onclick=()=>{state.settings.theme=state.settings.theme==="dark"?"light":"dark";save();applyTheme();drawAll()};
-$("#currencySelect").value=state.settings.currency;
-$("#currencySelect").onchange=e=>{state.settings.currency=e.target.value;save();render();drawAll();toast("Currency updated")};
-
-function applyTheme(){document.documentElement.classList.toggle("light",state.settings.theme==="light");$("#themeToggle").textContent=state.settings.theme==="dark"?"☀️":"🌙"}
+function applyTheme(){$("html").classList.toggle("light",state.settings.theme==="light");$("#themeBtn").textContent=state.settings.theme==="dark"?"☼":"☾"}
 applyTheme();
+$("#currency").value=state.settings.currency;
+$("#today").textContent=new Date().toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"});
+$("#themeBtn").onclick=()=>{state.settings.theme=state.settings.theme==="dark"?"light":"dark";save();applyTheme();drawAll()};
+$("#currency").onchange=e=>{state.settings.currency=e.target.value;save();render();drawAll()};
 
-function todaySales(){return state.sales.filter(x=>x.date===today())}
-function todayTx(){return state.transactions.filter(x=>x.date===today())}
-function totals(){
-  const salesIncome=todaySales().reduce((a,s)=>a+s.sellingPrice*s.quantity,0);
-  const txIncome=todayTx().filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount),0);
-  const expenses=todayTx().filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount),0);
-  const saleProfit=todaySales().reduce((a,s)=>a+(s.sellingPrice-s.costPrice)*s.quantity,0);
-  return {income:salesIncome+txIncome,expenses,profit:saleProfit+txIncome-expenses};
+function dayRows(){
+  const dates=rangeDays==="all"
+    ? [...new Set([...state.sales.map(x=>x.date),...state.transactions.map(x=>x.date)])].sort()
+    : days(Number(rangeDays));
+  return dates.length?dates.map(day):days(7).map(day);
 }
+function days(n){const out=[];for(let i=n-1;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);out.push(d.toISOString().slice(0,10))}return out}
+function day(date){
+  const sales=state.sales.filter(x=>x.date===date);
+  const tx=state.transactions.filter(x=>x.date===date);
+  const revenue=sales.reduce((a,s)=>a+s.sellingPrice*s.quantity,0);
+  const cost=sales.reduce((a,s)=>a+s.costPrice*s.quantity,0);
+  const incoming=tx.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount),0);
+  const expense=tx.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount),0);
+  const profit=revenue+incoming-cost-expense;
+  return {date,revenue,cost,incoming,expense,profit,margin:revenue+incoming?profit/(revenue+incoming)*100:0,activity:sales.length+tx.length};
+}
+function todayTotals(){const d=day(today());return {income:d.revenue+d.incoming,expense:d.expense,profit:d.profit}}
+
 function render(){
-  const t=totals();
-  $("#balanceValue").textContent=money(state.accountBalance.amount);
-  $("#balanceUpdated").textContent=state.accountBalance.lastUpdated?`Updated ${new Date(state.accountBalance.lastUpdated).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`:"Not updated yet";
-  $("#incomeValue").textContent=money(t.income);
-  $("#expenseValue").textContent=money(t.expenses);
-  $("#profitValue").textContent=money(t.profit);
-  const banner=$("#statusBanner");banner.classList.toggle("positive",t.profit>0);banner.classList.toggle("negative",t.profit<0);
-  $("#profitStatus").textContent=t.profit>0?"✅ Positive Day!":t.profit<0?"❌ Needs Work":"⚪ Break Even";
-  renderSales(); renderTasks(); renderRecurring(); renderTransactions();
+  const t=todayTotals();
+  $("#balance").textContent=money(state.accountBalance.amount);
+  $("#balanceHint").textContent=state.accountBalance.lastUpdated?"Tap to add money":"Set starting balance";
+  $("#income").textContent=money(t.income);$("#expense").textContent=money(t.expense);$("#profit").textContent=money(t.profit);
+  $("#profitStatus").textContent=t.profit>0?"● Positive Day":t.profit<0?"● Needs Work":"○ Break Even";
+  $("#profitBar").classList.toggle("positive",t.profit>0);$("#profitBar").classList.toggle("negative",t.profit<0);
+  renderTasks();renderSales();renderTransactions();renderRecurring();renderNotes();renderLog();
 }
-function renderSales(){
-  const body=$("#salesTable");body.innerHTML="";
-  const rows=[...state.sales].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  $("#salesEmpty").style.display=rows.length?"none":"block";
-  rows.slice(0,20).forEach(s=>{
-    const p=(s.sellingPrice-s.costPrice)*s.quantity, margin=s.sellingPrice?sellingMargin(s):0;
-    body.insertAdjacentHTML("beforeend",`<tr>
-      <td>${escape(s.date)}</td><td>${escape(s.itemName)}</td><td>${money(s.costPrice)}</td><td>${money(s.sellingPrice)}</td><td>${s.quantity}</td>
-      <td class="profit-cell ${p>=0?"positive-text":"loss"}">${money(p)}</td><td>${margin.toFixed(1)}%</td>
-      <td><button class="row-action" onclick="deleteSale('${s.id}')">×</button></td></tr>`);
-  });
-}
-function sellingMargin(s){return ((s.sellingPrice-s.costPrice)/s.costPrice*100)}
-window.deleteSale=id=>{state.sales=state.sales.filter(x=>x.id!==id);save();render();drawAll();toast("Sale deleted")};
-
 function renderTasks(){
-  const tasks=state.dailyChecklist.filter(x=>x.date===today());
-  const done=tasks.filter(x=>x.completed).length;
-  $("#taskCounter").textContent=`${done}/${tasks.length}`;$("#taskProgress").style.width=tasks.length?`${done/tasks.length*100}%`:"0%";
-  const list=$("#taskList");list.innerHTML="";
-  if(!tasks.length){list.innerHTML='<div class="empty">No tasks yet. Keep the day focused.</div>';return}
-  tasks.forEach(t=>list.insertAdjacentHTML("beforeend",`<div class="task ${t.completed?"done":""}">
-    <input type="checkbox" ${t.completed?"checked":""} onchange="toggleTask('${t.id}')"><span>${escape(t.task)}</span><button class="row-action" onclick="deleteTask('${t.id}')">×</button></div>`));
+  const list=state.dailyChecklist.filter(x=>x.date===today()),done=list.filter(x=>x.completed).length;
+  $("#taskCount").textContent=done+"/"+list.length;$("#taskProgress").style.width=list.length?(done/list.length*100)+"%":"0%";
+  $("#tasks").innerHTML=list.length?list.map(t=>`<div class="task ${t.completed?"done":""}"><input type="checkbox" ${t.completed?"checked":""} data-task="${t.id}"><span>${esc(t.task)}</span><button data-del-task="${t.id}">×</button></div>`).join(""):'<div class="empty">No tasks yet.</div>';
 }
-window.toggleTask=id=>{const t=state.dailyChecklist.find(x=>x.id===id);if(t)t.completed=!t.completed;save();renderTasks();toast("Task updated")};
-window.deleteTask=id=>{state.dailyChecklist=state.dailyChecklist.filter(x=>x.id!==id);save();renderTasks();toast("Task deleted")};
-function addTask(){const input=$("#taskInput"),task=input.value.trim();if(!task)return;state.dailyChecklist.push({id:uid("task"),date:today(),task,completed:false});input.value="";save();renderTasks();toast("Task added")}
-$("#addTaskBtn").onclick=addTask;$("#taskInput").onkeydown=e=>{if(e.key==="Enter")addTask()};
+$("#tasks").onclick=e=>{const check=e.target.closest("[data-task]"),del=e.target.closest("[data-del-task]");if(check){const t=state.dailyChecklist.find(x=>x.id===check.dataset.task);if(t)t.completed=check.checked;save();renderTasks()}if(del){state.dailyChecklist=state.dailyChecklist.filter(x=>x.id!==del.dataset.delTask);save();renderTasks()}};
+function addTask(){const input=$("#taskInput"),v=input.value.trim();if(!v)return;state.dailyChecklist.push({id:id("task"),date:today(),task:v,completed:false});input.value="";save();renderTasks()}
+$("#addTask").onclick=addTask;$("#taskInput").onkeydown=e=>{if(e.key==="Enter")addTask()};
 
-function renderRecurring(){
-  const el=$("#recurringList");el.innerHTML="";
-  if(!state.recurringTasks.length){el.innerHTML='<div class="empty">No recurring tasks configured.</div>';return}
-  state.recurringTasks.forEach(r=>el.insertAdjacentHTML("beforeend",`<div class="recurring"><div class="recurring-top"><span class="recurring-name">${escape(r.taskName)}</span><button class="row-action" onclick="deleteRecurring('${r.id}')">×</button></div><div class="recurring-meta">${r.frequency} · next ${r.nextDate}</div></div>`));
+function renderSales(){
+  const rows=[...state.sales].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  $("#salesTable").innerHTML=rows.slice(0,8).map(s=>{const p=(s.sellingPrice-s.costPrice)*s.quantity,m=s.costPrice?p/(s.costPrice*s.quantity)*100:0;return `<tr><td>${s.date.slice(5)}</td><td>${esc(s.itemName)}</td><td>${money(s.costPrice)}</td><td>${money(s.sellingPrice)}</td><td>${s.quantity}</td><td class="${p>=0?"green-text":"red-text"}">${money(p)}</td><td>${m.toFixed(1)}%</td><td><button class="row-btn" data-sale="${s.id}">×</button></td></tr>`}).join("");
+  $("#salesEmpty").style.display=rows.length?"none":"block";
 }
-window.deleteRecurring=id=>{state.recurringTasks=state.recurringTasks.filter(x=>x.id!==id);save();renderRecurring();toast("Recurring task deleted")};
+$("#salesTable").onclick=e=>{const b=e.target.closest("[data-sale]");if(!b)return;state.sales=state.sales.filter(x=>x.id!==b.dataset.sale);save();render();drawAll();toast("Sale deleted")};
 
 function renderTransactions(){
-  const body=$("#transactionTable");body.innerHTML="";
   const rows=[...state.transactions].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  $("#transactionsEmpty").style.display=rows.length?"none":"block";
-  let balance=state.accountBalance.amount;
-  [...rows].reverse().forEach(x=>balance += x.type==="income"?Number(x.amount):-Number(x.amount));
-  rows.slice(0,10).forEach(x=>body.insertAdjacentHTML("beforeend",`<tr><td>${escape(x.time||"—")}</td><td><span class="type-badge ${x.type}">${x.type}</span></td><td>${escape(x.category)}</td><td>${escape(x.description||"")}</td><td>${money(x.amount)}</td><td>${money(balance)}</td><td><button class="row-action" onclick="deleteTx('${x.id}')">×</button></td></tr>`));
+  $("#txTable").innerHTML=rows.slice(0,8).map(x=>`<tr><td>${esc(x.time)}</td><td><span class="type ${x.type}">${x.type}</span></td><td>${esc(x.category)}</td><td>${esc(x.description||"")}</td><td>${money(x.amount)}</td><td><button class="row-btn" data-tx="${x.id}">×</button></td></tr>`).join("");
+  $("#txEmpty").style.display=rows.length?"none":"block";
 }
-window.deleteTx=id=>{state.transactions=state.transactions.filter(x=>x.id!==id);save();render();drawAll();toast("Transaction deleted")};
+$("#txTable").onclick=e=>{const b=e.target.closest("[data-tx]");if(!b)return;state.transactions=state.transactions.filter(x=>x.id!==b.dataset.tx);save();render();drawAll();toast("Transaction deleted")};
 
-const modal=$("#modal"),form=$("#modalForm");
-function openModal(title,eyebrow,fields,onSave){
+function renderRecurring(){
+  const el=$("#recurring");
+  el.innerHTML=state.recurringTasks.length?state.recurringTasks.map(r=>`<div class="recurring-item"><div class="recurring-name">${esc(r.taskName)}</div><div class="recurring-meta">${r.frequency} · next ${r.nextDate} <button class="row-btn" data-rec="${r.id}">×</button></div></div>`).join(""):'<div class="empty">No recurring tasks.</div>';
+}
+$("#recurring").onclick=e=>{const b=e.target.closest("[data-rec]");if(!b)return;state.recurringTasks=state.recurringTasks.filter(x=>x.id!==b.dataset.rec);save();renderRecurring()};
+
+const modal=$("#modal");
+function formModal(title,eyebrow,fields,done){
   $("#modalTitle").textContent=title;$("#modalEyebrow").textContent=eyebrow;
-  form.innerHTML=`<div class="modal-body">${fields.map(f=>`<div class="field"><label>${f.label}</label>${f.html}</div>`).join("")}<div class="form-actions"><button type="button" class="secondary" id="cancelModal">Cancel</button><button class="primary">Save</button></div></div>`;
-  $("#cancelModal").onclick=()=>modal.close();form.onsubmit=e=>{e.preventDefault();onSave(new FormData(form));modal.close()};
-  modal.showModal();
+  $("#form").innerHTML=`<div class="modal-body">${fields.map(f=>`<div class="field"><label>${f.label}</label>${f.input}</div>`).join("")}<div class="form-actions"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn btn-solid">Save</button></div></div>`;
+  $("#cancel").onclick=()=>modal.close();$("#form").onsubmit=e=>{e.preventDefault();done(new FormData(e.currentTarget));modal.close()};modal.showModal();
 }
 $("#closeModal").onclick=()=>modal.close();
-$("#balanceCard").onclick=()=>openModal("Update balance","ACCOUNT",[{label:"Current balance",html:`<input name="amount" type="number" min="0" step="0.01" value="${state.accountBalance.amount}" required>`}],fd=>{
-  state.accountBalance.amount=Number(fd.get("amount"));state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({amount:state.accountBalance.amount,date:state.accountBalance.lastUpdated});save();render();toast("Balance saved")
-});
-$("#addTransactionBtn").onclick=()=>openTransaction();
-function openTransaction(){openModal("Add transaction","CASH LEDGER",[
- {label:"Type",html:'<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select>'},
- {label:"Category",html:'<select name="category"><option>Inventory</option><option>Rent</option><option>Marketing</option><option>Utilities</option><option>Misc</option><option>Sales</option></select>'},
- {label:"Amount",html:'<input name="amount" type="number" min="0" step="0.01" required>'},
- {label:"Description",html:'<input name="description" placeholder="What was this for?">'}
-],fd=>{const d=new Date();state.transactions.push({id:uid("tx"),date:today(),time:d.toTimeString().slice(0,5),type:fd.get("type"),category:fd.get("category"),amount:Number(fd.get("amount")),description:fd.get("description"),note:""});save();render();drawAll();toast("Transaction saved")})}
-$("#addSaleBtn").onclick=()=>openModal("Add sale","SALES TRACKER",[
- {label:"Item",html:'<input name="itemName" required placeholder="Product name">'},
- {label:"Cost price (unit)",html:'<input name="costPrice" type="number" min="0" step="0.01" required>'},
- {label:"Selling price (unit)",html:'<input name="sellingPrice" type="number" min="0" step="0.01" required>'},
- {label:"Quantity",html:'<input name="quantity" type="number" min="1" step="1" value="1" required>'}
-],fd=>{const d=new Date(),s={id:uid("sale"),date:today(),time:d.toTimeString().slice(0,5),itemName:fd.get("itemName"),costPrice:Number(fd.get("costPrice")),sellingPrice:Number(fd.get("sellingPrice")),quantity:Number(fd.get("quantity"))};s.profit=(s.sellingPrice-s.costPrice)*s.quantity;s.profitPercentage=s.costPrice?s.profit/(s.costPrice*s.quantity)*100:0;state.sales.push(s);save();render();drawAll();toast("Sale added")});
-$("#addRecurringBtn").onclick=()=>openModal("Add recurring task","SCHEDULER",[
- {label:"Task name",html:'<input name="taskName" required placeholder="Restock">'},
- {label:"Frequency",html:'<select name="frequency"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>'},
- {label:"Next date",html:`<input name="nextDate" type="date" value="${today()}" required>`}
-],fd=>{state.recurringTasks.push({id:uid("rt"),taskName:fd.get("taskName"),frequency:fd.get("frequency"),nextDate:fd.get("nextDate"),daysCompleted:[]});save();renderRecurring();toast("Recurring task added")});
 
-let chartRange=7;
-function lastDays(n){
-  const out=[];for(let i=n-1;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);out.push(d.toISOString().slice(0,10))}return out
-}
-function rangeDates(){
-  if(chartRange==="all"){
-    const dates=[...new Set([...state.sales.map(x=>x.date),...state.transactions.map(x=>x.date)])].sort();
-    return dates.length?dates:lastDays(7);
+$("#balanceCard").onclick=()=>{
+  if(!state.accountBalance.lastUpdated){
+    formModal("Set starting balance","ACCOUNT",[
+      {label:"Starting balance",input:'<input name="amount" type="number" min="0" step=".01" required>'},
+      {label:"Note",input:'<input name="note" placeholder="e.g. Cash + bank balance">'}],fd=>{
+        const a=Number(fd.get("amount"));state.accountBalance.amount=a;state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({date:state.accountBalance.lastUpdated,type:"starting",change:a,note:fd.get("note")});save();render();drawAll();toast("Balance saved");
+      });
+  }else{
+    formModal("Add money","BALANCE · ADD ONLY",[
+      {label:"Amount received",input:'<input name="amount" type="number" min=".01" step=".01" required>'},
+      {label:"Source",input:'<input name="note" placeholder="e.g. Money from family">'}],fd=>{
+        const a=Number(fd.get("amount"));state.accountBalance.amount+=a;state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({date:state.accountBalance.lastUpdated,type:"add",change:a,note:fd.get("note")});save();render();drawAll();toast("Money added");
+      });
   }
-  return lastDays(Number(chartRange));
-}
-function last7(){return lastDays(7)}
-function dayProfit(date){
-  const sales=state.sales.filter(x=>x.date===date).reduce((a,s)=>a+(s.sellingPrice-s.costPrice)*s.quantity,0);
-  const inc=state.transactions.filter(x=>x.date===date&&x.type==="income").reduce((a,x)=>a+Number(x.amount),0);
-  const exp=state.transactions.filter(x=>x.date===date&&x.type==="expense").reduce((a,x)=>a+Number(x.amount),0);
-  return sales+inc-exp;
-}
-function setupCanvas(canvas){
-  const dpr=devicePixelRatio||1,r=canvas.getBoundingClientRect();canvas.width=r.width*dpr;canvas.height=r.height*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);return [c,r.width,r.height]
-}
-function drawLineChart(){
-  const [c,w,h]=setupCanvas($("#profitChart")),ds=rangeDates(),vals=ds.map(dayProfit);
-  const max=Math.max(...vals,1),min=Math.min(...vals,-1),range=max-min||1;
-  c.clearRect(0,0,w,h);c.strokeStyle=getCss("--border");c.lineWidth=1;
-  for(let i=0;i<5;i++){let y=15+i*(h-45)/4;c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke()}
-  const pts=vals.map((v,i)=>({x:18+(i*(w-36)/Math.max(ds.length-1,1)),y:15+(max-v)/range*(h-45)}));
-  if(pts.length){
-    const grad=c.createLinearGradient(0,0,0,h);grad.addColorStop(0,"rgba(0,212,255,.22)");grad.addColorStop(1,"rgba(0,212,255,0)");
-    c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.lineTo(pts.at(-1).x,h-25);c.lineTo(pts[0].x,h-25);c.closePath();c.fillStyle=grad;c.fill();
-    c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=getCss("--accent");c.lineWidth=2.5;c.stroke();
-    const stride=Math.max(1,Math.ceil(ds.length/7));
-    pts.forEach((p,i)=>{if(i%stride===0||i===pts.length-1){c.beginPath();c.arc(p.x,p.y,3.5,0,Math.PI*2);c.fillStyle=vals[i]>=0?getCss("--success"):getCss("--danger");c.fill();c.fillStyle=getCss("--muted");c.font="9px Inter";c.fillText(ds[i].slice(5),p.x-13,h-7)}});
-  }
-}
-function drawDonut(){
-  const [c,w,h]=setupCanvas($("#expenseChart")),cx=w/2,cy=h/2,r=Math.min(w,h)/2-10;
-  const cats=["Inventory","Rent","Marketing","Utilities","Misc"],vals=cats.map(k=>state.transactions.filter(x=>x.type==="expense"&&x.category===k).reduce((a,x)=>a+Number(x.amount),0)),sum=vals.reduce((a,b)=>a+b,0);
-  c.clearRect(0,0,w,h);let a=-Math.PI/2;const accents=["--accent","--success","--warning","--danger","--muted"];
-  vals.forEach((v,i)=>{const da=sum?v/sum*Math.PI*2:0;c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,r,a,a+da);c.closePath();c.fillStyle=getCss(accents[i]);c.fill();a+=da});
-  c.globalCompositeOperation="destination-out";c.beginPath();c.arc(cx,cy,r*.58,0,Math.PI*2);c.fill();c.globalCompositeOperation="source-over";
-  $("#expenseTotal").textContent=money(sum);
-  $("#expenseLegend").innerHTML=cats.map((k,i)=>`<div class="legend-row"><span class="legend-dot" style="background:${getCss(accents[i])}"></span>${k}<span style="margin-left:auto;color:var(--muted)">${sum?(vals[i]/sum*100).toFixed(0):0}%</span></div>`).join("");
-}
-function drawBars(){
-  const [c,w,h]=setupCanvas($("#salesChart")),ds=rangeDates();
-  const qty=ds.map(d=>state.sales.filter(s=>s.date===d).reduce((a,s)=>a+s.quantity,0));
-  const rev=ds.map(d=>state.sales.filter(s=>s.date===d).reduce((a,s)=>a+s.sellingPrice*s.quantity,0));
-  const mx=Math.max(...qty,1),mr=Math.max(...rev,1);c.clearRect(0,0,w,h);
-  const step=(w-40)/Math.max(ds.length,1),bw=Math.max(3,Math.min(14,step*.32));
-  ds.forEach((d,i)=>{const x=20+i*step;const qh=(qty[i]/mx)*(h-42),rh=(rev[i]/mr)*(h-42);c.fillStyle=getCss("--accent");c.fillRect(x,h-22-qh,bw,qh);c.fillStyle=getCss("--success");c.fillRect(x+bw+2,h-22-rh,bw,rh);if(i%Math.max(1,Math.ceil(ds.length/7))===0){c.fillStyle=getCss("--muted");c.font="8px Inter";c.fillText(d.slice(5),x-2,h-6)}});
-}
-function historicalRows(){
-  const ds=rangeDates();
-  return ds.map(date=>{
-    const income=state.sales.filter(s=>s.date===date).reduce((a,s)=>a+s.sellingPrice*s.quantity,0)+state.transactions.filter(x=>x.date===date&&x.type==="income").reduce((a,x)=>a+Number(x.amount),0);
-    const expense=state.transactions.filter(x=>x.date===date&&x.type==="expense").reduce((a,x)=>a+Number(x.amount),0);
-    const cost=state.sales.filter(s=>s.date===date).reduce((a,s)=>a+s.costPrice*s.quantity,0);
-    return {date,income,expense,profit:income-cost-expense,cost};
-  });
-}
-function drawHistoricalLine(canvasId, values, positiveColor=getCss("--accent")){
-  const [c,w,h]=setupCanvas($("#"+canvasId));const vals=values.map(x=>x.v),max=Math.max(...vals,1),min=Math.min(...vals,0),range=max-min||1;c.clearRect(0,0,w,h);
-  c.strokeStyle=getCss("--border");for(let i=0;i<4;i++){const y=15+i*(h-40)/3;c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke()}
-  const pts=vals.map((v,i)=>({x:16+i*(w-32)/Math.max(vals.length-1,1),y:15+(max-v)/range*(h-40)}));
-  if(!pts.length)return;c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=positiveColor;c.lineWidth=2.5;c.stroke();
-  pts.forEach((p,i)=>{if(i%Math.max(1,Math.ceil(vals.length/8))===0||i===pts.length-1){c.beginPath();c.arc(p.x,p.y,3,0,Math.PI*2);c.fillStyle=positiveColor;c.fill();c.fillStyle=getCss("--muted");c.font="8px Inter";c.fillText(values[i].label,p.x-12,h-5)}});
-}
-function drawBalanceChart(){
-  const rows=historicalRows();let bal=state.accountBalance.amount;
-  const txImpact=rows.slice().reverse().map(r=>r.income-r.expense-r.cost);
-  // Reconstruct a useful historical curve from current balance backwards.
-  const curves=[];let cur=bal;
-  for(let i=rows.length-1;i>=0;i--){cur-=txImpact[i]||0;curves.unshift(cur+txImpact[i]||cur); }
-  drawHistoricalLine("balanceChart",rows.map((r,i)=>({v:curves[i]??bal,label:r.date.slice(5)})),getCss("--accent"));
-}
-function drawCashflowChart(){
-  const rows=historicalRows(), canvas=$("#cashflowChart"),[c,w,h]=setupCanvas(canvas);c.clearRect(0,0,w,h);
-  const mx=Math.max(...rows.map(r=>Math.max(r.income,r.expense)),1),step=(w-30)/Math.max(rows.length,1),bw=Math.max(3,Math.min(12,step*.32));
-  rows.forEach((r,i)=>{const x=15+i*step,ih=r.income/mx*(h-40),eh=r.expense/mx*(h-40);c.fillStyle=getCss("--success");c.fillRect(x,h-25-ih,bw,ih);c.fillStyle=getCss("--danger");c.fillRect(x+bw+2,h-25-eh,bw,eh);if(i%Math.max(1,Math.ceil(rows.length/8))===0){c.fillStyle=getCss("--muted");c.font="8px Inter";c.fillText(r.date.slice(5),x-2,h-7)}});
-}
-function drawMarginChart(){
-  const rows=historicalRows().map(r=>({v:r.income?Math.max(-100,Math.min(100,r.profit/r.income*100)):0,label:r.date.slice(5)}));
-  drawHistoricalLine("marginChart",rows,getCss("--warning"));
-}
-function drawActivityChart(){
-  const ds=rangeDates(),vals=ds.map(d=>({v:state.transactions.filter(x=>x.date===d).length+state.sales.filter(x=>x.date===d).length,label:d.slice(5)}));
-  drawHistoricalLine("activityChart",vals,getCss("--success"));
-}
-function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
-function drawAll(){drawLineChart();drawDonut();drawBars();drawBalanceChart();drawCashflowChart();drawMarginChart();drawActivityChart()}
-window.addEventListener("resize",drawAll);
+};
 
-function updateClock(){
-  const now=new Date();
-  $("#liveClock").textContent=now.toLocaleTimeString("en-IN",{hour12:false});
-  $("#liveDate").textContent=now.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"numeric"});
-}
-updateClock();setInterval(updateClock,1000);
-
-document.querySelectorAll("#rangeTabs button").forEach(btn=>btn.onclick=()=>{
-  document.querySelectorAll("#rangeTabs button").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");chartRange=btn.dataset.range;drawAll();toast(`Showing ${btn.textContent} history`);
+$("#newTx").onclick=()=>formModal("Add transaction","CASH",[
+ {label:"Type",input:'<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select>'},
+ {label:"Category",input:'<select name="category"><option>Daily Use</option><option>Food</option><option>Travel</option><option>Inventory</option><option>Rent</option><option>Marketing</option><option>Utilities</option><option>Misc</option></select>'},
+ {label:"Amount",input:'<input name="amount" type="number" min=".01" step=".01" required>'},
+ {label:"Description",input:'<input name="description" placeholder="What happened?">'}],fd=>{
+  const amount=Number(fd.get("amount")),type=fd.get("type");
+  if(type==="expense"&&amount>state.accountBalance.amount){toast("Not enough balance");return}
+  const d=new Date();state.transactions.push({id:id("tx"),date:today(),time:d.toTimeString().slice(0,5),type,category:fd.get("category"),amount,description:fd.get("description"),note:""});
+  state.accountBalance.amount+=type==="income"?amount:-amount;state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({date:state.accountBalance.lastUpdated,type,change:type==="income"?amount:-amount,note:fd.get("description")});save();render();drawAll();toast(type==="expense"?"Expense deducted":"Income added");
 });
 
-$("#exportCsvBtn").onclick=()=>{
-  const rows=[["Date","Time","Type","Category","Description","Amount"],...state.transactions.map(x=>[x.date,x.time,x.type,x.category,x.description,x.amount])];
-  const csv=rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=`kharchatrack-${today()}.csv`;a.click();URL.revokeObjectURL(a.href);toast("CSV exported")
-};
-$("#reportBtn").onclick=()=>{
-  const t=totals(), sales=todaySales(), tx=todayTx();
-  const w=window.open("","_blank");if(!w){toast("Allow pop-ups to generate the report");return}
-  w.document.write(`<html><head><title>KharchaTRACK Daily Report</title><style>body{font:14px Arial;padding:40px;color:#172033}h1{margin-bottom:4px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.box{padding:16px;border:1px solid #ddd;border-radius:10px}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}@media print{button{display:none}}</style></head><body><h1>KharchaTRACK</h1><p>Daily report · ${today()}</p><div class="grid"><div class="box"><b>Income</b><h2>${money(t.income)}</h2></div><div class="box"><b>Expense</b><h2>${money(t.expenses)}</h2></div><div class="box"><b>Net Profit</b><h2>${money(t.profit)}</h2></div></div><h2>Sales (${sales.length})</h2><table><tr><th>Item</th><th>Qty</th><th>Revenue</th><th>Profit</th></tr>${sales.map(s=>`<tr><td>${escape(s.itemName)}</td><td>${s.quantity}</td><td>${money(s.sellingPrice*s.quantity)}</td><td>${money((s.sellingPrice-s.costPrice)*s.quantity)}</td></tr>`).join("")}</table><h2>Transactions (${tx.length})</h2><table><tr><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr>${tx.map(x=>`<tr><td>${x.type}</td><td>${escape(x.category)}</td><td>${escape(x.description)}</td><td>${money(x.amount)}</td></tr>`).join("")}</table><br><button onclick="print()">Print / Save as PDF</button></body></html>`);w.document.close()
-};
-$("#clearBtn").onclick=()=>{if(confirm("Clear all KharchaTRACK data? This cannot be undone.")){localStorage.removeItem(KEY);state=load();render();drawAll();toast("All data cleared")}};
-render();drawAll();
+$("#newSale").onclick=()=>formModal("Add sale","SALES",[
+ {label:"Item",input:'<input name="item" required>'},{label:"Cost / unit",input:'<input name="cost" type="number" min="0" step=".01" required>'},{label:"Sell / unit",input:'<input name="sell" type="number" min="0" step=".01" required>'},{label:"Quantity",input:'<input name="qty" type="number" min="1" step="1" value="1" required>'}],fd=>{
+ const d=new Date(),s={id:id("sale"),date:today(),time:d.toTimeString().slice(0,5),itemName:fd.get("item"),costPrice:Number(fd.get("cost")),sellingPrice:Number(fd.get("sell")),quantity:Number(fd.get("qty"))};state.sales.push(s);save();render();drawAll();toast("Sale added");
+});
+$("#newRecurring").onclick=()=>formModal("Add recurring task","SCHEDULE",[
+ {label:"Task",input:'<input name="name" required>'},{label:"Frequency",input:'<select name="frequency"><option>daily</option><option>weekly</option><option>monthly</option></select>'},{label:"Next date",input:`<input name="date" type="date" value="${today()}" required>`}],fd=>{state.recurringTasks.push({id:id("rec"),taskName:fd.get("name"),frequency:fd.get("frequency"),nextDate:fd.get("date"),daysCompleted:[]});save();renderRecurring();toast("Task scheduled")});
 
-let calcExpr="";
-state.notes=state.notes||"";state.calcLog=state.calcLog||[];
-function renderNotes(){const n=document.querySelector("#notesPad");if(n&&document.activeElement!==n)n.value=state.notes||""}
-function renderCalcLog(){const e=document.querySelector("#calcLog");if(!e)return;e.innerHTML=(state.calcLog||[]).slice(-20).reverse().map(x=>`<div class="calc-log-row"><span>${escape(x.expression)}</span><b>${escape(x.result)}</b></div>`).join("")||'<div class="empty">Calculations will appear here.</div>'}
-function safeCalc(s){if(!/^[0-9+\-*/%.()\s]+$/.test(s))return null;try{const v=Function('"use strict";return ('+s+')')();return Number.isFinite(v)?String(Math.round(v*100000000)/100000000):null}catch{return null}}
-function calcRefresh(){const r=safeCalc(calcExpr);document.querySelector("#calcExpression").textContent=calcExpr||"0";document.querySelector("#calcResult").textContent=r??"—"}
-function addCalcLog(expr,result){state.calcLog.push({expression:expr,result,date:new Date().toISOString()});state.notes=(state.notes||"")+`\n[${new Date().toLocaleTimeString()}] ${expr} = ${result}`;save();renderNotes();renderCalcLog()}
-document.querySelector("#notesPad")?.addEventListener("input",e=>{state.notes=e.target.value;save()});
-document.querySelector("#clearCalcLog")?.addEventListener("click",()=>{state.calcLog=[];save();renderCalcLog()});
-document.querySelectorAll("[data-calc]").forEach(b=>b.addEventListener("click",()=>{const v=b.dataset.calc;if(v==="clear"){calcExpr=""}else if(v==="back"){calcExpr=calcExpr.slice(0,-1)}else if(v==="="){const r=safeCalc(calcExpr);if(r!==null){addCalcLog(calcExpr,r);calcExpr=r}}else if(v==="%"){calcExpr+="/100"}else calcExpr+=v;calcRefresh()}));
-renderNotes();renderCalcLog();
+function setupCanvas(c){const r=c.getBoundingClientRect(),d=devicePixelRatio||1;c.width=Math.max(1,r.width*d);c.height=Math.max(1,r.height*d);const ctx=c.getContext("2d");ctx.setTransform(d,0,0,d,0,0);return[ctx,r.width,r.height]}
+function grid(ctx,w,h){ctx.strokeStyle=css("--line");ctx.lineWidth=1;for(let i=0;i<4;i++){const y=12+i*(h-38)/3;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}}
+function plot(canvasId,vals,color){const [c,w,h]=setupCanvas($("#"+canvasId));c.clearRect(0,0,w,h);grid(c,w,h);if(!vals.length)return;let max=Math.max(...vals.map(x=>x.v),1),min=Math.min(...vals.map(x=>x.v),0),span=max-min||1;const pts=vals.map((x,i)=>({x:16+i*(w-32)/Math.max(vals.length-1,1),y:12+(max-x.v)/span*(h-38)}));c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=color;c.lineWidth=2;c.stroke();pts.forEach((p,i)=>{if(i%Math.max(1,Math.ceil(vals.length/8))===0||i===pts.length-1){c.beginPath();c.arc(p.x,p.y,3,0,Math.PI*2);c.fillStyle=color;c.fill();c.fillStyle=css("--muted");c.font="8px Inter";c.fillText(vals[i].label,p.x-10,h-6)}})}
+function drawProfit(){const ds=days(7),vals=ds.map(x=>day(x).profit),max=Math.max(...vals,1),min=Math.min(...vals,-1),span=max-min||1,[c,w,h]=setupCanvas($("#profitChart"));c.clearRect(0,0,w,h);grid(c,w,h);const pts=vals.map((v,i)=>({x:16+i*(w-32)/6,y:12+(max-v)/span*(h-38)}));c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.strokeStyle=css("--white");c.lineWidth=1.7;c.stroke();pts.forEach((p,i)=>{c.beginPath();c.arc(p.x,p.y,4,0,7);c.fillStyle=vals[i]>=0?css("--green"):css("--red");c.fill();c.fillStyle=css("--muted");c.font="8px Inter";c.fillText(ds[i].slice(5),p.x-11,h-6)})}
+function drawBalance(){let rows=dayRows(),cur=state.accountBalance.amount-rows.reduce((a,r)=>a+r.incoming-r.expense,0),vals=[];rows.forEach(r=>{cur+=r.incoming-r.expense;vals.push({v:cur,label:r.date.slice(5)})});plot("balanceChart",vals,css("--white"))}
+function drawCash(){const rows=dayRows(),[c,w,h]=setupCanvas($("#cashChart"));c.clearRect(0,0,w,h);grid(c,w,h);const max=Math.max(...rows.map(r=>Math.max(r.incoming+r.revenue,r.expense)),1),step=(w-24)/Math.max(rows.length,1),bw=Math.max(3,Math.min(11,step*.3));rows.forEach((r,i)=>{const x=12+i*step,inc=(r.incoming+r.revenue)/max*(h-38),exp=r.expense/max*(h-38);c.fillStyle=css("--green");c.fillRect(x,h-25-inc,bw,inc);c.fillStyle=css("--red");c.fillRect(x+bw+2,h-25-exp,bw,exp)})}
+function drawCharts(){drawProfit();const rows=dayRows();plot("balanceChart",rows.map((r,i)=>({v:0,label:r.date.slice(5)})),css("--white"));drawBalance();drawCash();plot("marginChart",rows.map(r=>({v:r.margin,label:r.date.slice(5)})),css("--green"));plot("activityChart",rows.map(r=>({v:r.activity,label:r.date.slice(5)})),css("--white"))}
+function drawAll(){drawCharts()}
 
+$("#range").onclick=e=>{const b=e.target.closest("button");if(!b)return;document.querySelectorAll("#range button").forEach(x=>x.classList.remove("active"));b.classList.add("active");rangeDays=b.dataset.days==="all"?"all":Number(b.dataset.days);drawAll()};
 
-const legalModal=document.querySelector("#legalModal");
-const legalContent={
- license:{
-  title:"MIT License",eyebrow:"OPEN SOURCE LICENSE",
-  html:`<h3>Copyright</h3><p>Copyright © 2026 <strong>Deep Lambhade</strong>.</p>
-  <h3>Permission</h3><p>TradeGrid is released as open-source software under the MIT License. Anyone may use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, subject to the license conditions.</p>
-  <h3>Condition</h3><p>The above copyright notice and this permission notice must be included in all copies or substantial portions of the software.</p>
-  <h3>Disclaimer</h3><p>THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. See the full <strong>LICENSE</strong> file included with the project for the complete legal text.</p>`
- },
- terms:{
-  title:"Terms & Conditions",eyebrow:"TERMS",
-  html:`<h3>1. Use</h3><p>TradeGrid may be used by individuals, students, traders, businesses, and developers for personal, educational, testing, or commercial purposes in accordance with its open-source license.</p>
-  <h3>2. Your data</h3><p>TradeGrid is designed to store dashboard data locally in your browser. You are responsible for maintaining your own backups and for protecting access to the device and browser profile where your data is stored.</p>
-  <h3>3. Financial information</h3><p>TradeGrid is a record-keeping and calculation tool. It is not financial, investment, tax, accounting, or legal advice. Verify important calculations and records independently.</p>
-  <h3>4. Software responsibility</h3><p>You use and modify the software at your own risk. The project is provided under the MIT License without warranties. Do not rely on it as the sole record for legally or financially significant information.</p>
-  <h3>5. Open-source use</h3><p>You may fork, modify, and redistribute TradeGrid as permitted by the MIT License. Preserve the required copyright and license notices.</p>`
- },
- privacy:{
-  title:"Privacy",eyebrow:"LOCAL-FIRST PRIVACY",
-  html:`<h3>Local storage</h3><p>TradeGrid's dashboard records are intended to remain in your browser's local storage. The app does not require a TradeGrid server or account for its core functionality.</p>
-  <h3>Your responsibility</h3><p>Clearing browser storage, using private browsing, uninstalling/resetting a browser profile, or changing devices can remove locally stored records. Export important data regularly.</p>
-  <h3>Third-party resources</h3><p>The starter interface may load the Inter font from Google Fonts when an internet connection is available. Apart from such explicitly included resources, the core dashboard does not need an external data service.</p>`
- }
+let expression="";
+function safeCalculate(s){if(!/^[0-9+\-*/().\s]+$/.test(s))return null;try{const n=Function('"use strict";return ('+s+')')();return Number.isFinite(n)?String(Math.round(n*1e10)/1e10):null}catch{return null}}
+function showCalc(){const result=safeCalculate(expression);$("#calcExpression").textContent=expression||"0";$("#calcResult").textContent=result??"—"}
+function logCalc(exp,result){state.calcLog.push({expression:exp,result,date:new Date().toISOString()});state.notes=(state.notes||"")+(state.notes?"\n":"")+`[${new Date().toLocaleTimeString()}] ${exp} = ${result}`;save();renderNotes();renderLog()}
+function press(key){
+ if(key==="clear"){expression="";showCalc();return}
+ if(key==="back"){expression=expression.slice(0,-1);showCalc();return}
+ if(key==="percent"){expression+=" / 100";showCalc();return}
+ if(key==="equals"){const result=safeCalculate(expression);if(result!==null){logCalc(expression,result);expression=result;showCalc()}return}
+ expression+=key;showCalc()
+}
+$("#keys").onclick=e=>{const b=e.target.closest("[data-key]");if(b)press(b.dataset.key)};
+document.addEventListener("keydown",e=>{if(e.target.matches("input,textarea,select"))return;const k=e.key;if(/[0-9+\-*/().]/.test(k))press(k);else if(k==="Enter")press("equals");else if(k==="Backspace")press("back");else if(k==="%")press("percent");else if(k==="Escape")press("clear")});
+function renderNotes(){const n=$("#notes");if(n&&document.activeElement!==n)n.value=state.notes||""}
+function renderLog(){$("#calcLog").innerHTML=state.calcLog.length?state.calcLog.slice(-20).reverse().map(x=>`<div class="calc-line"><span>${esc(x.expression)}</span><b>${esc(x.result)}</b></div>`).join(""):'<div class="empty">No calculations yet.</div>'}
+$("#notes").oninput=e=>{state.notes=e.target.value;save()};$("#clearLog").onclick=()=>{state.calcLog=[];save();renderLog()};
+
+$("#csv").onclick=()=>{const rows=[["Date","Time","Type","Category","Description","Amount"],...state.transactions.map(x=>[x.date,x.time,x.type,x.category,x.description,x.amount])];const text=rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=`tradegrid-${today()}.csv`;a.click();URL.revokeObjectURL(a.href)};
+$("#print").onclick=()=>window.print();
+$("#clear").onclick=()=>{if(confirm("Clear all TradeGrid data? This cannot be undone.")){localStorage.removeItem(KEY);state=read();render();drawAll()}};
+
+function tick(){const d=new Date();$("#clock").textContent=d.toLocaleTimeString("en-IN",{hour12:false});$("#date").textContent=d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
+setInterval(tick,1000);tick();
+render();drawAll();renderNotes();renderLog();
+
+const legal={
+ license:["MIT License",`<h3>Copyright</h3><p>Copyright © 2026 <b>Deep Lambhade</b>.</p><h3>Permission</h3><p>TradeGrid is open-source software under the MIT License. You may use, copy, modify, publish, distribute, sublicense and sell copies, subject to the license conditions.</p><h3>Requirement</h3><p>Keep the copyright and permission notice with copies or substantial portions of the software.</p><h3>Disclaimer</h3><p>The software is provided “AS IS”, without warranty. See the included LICENSE file for the complete text.`],
+ terms:["Terms & Conditions",`<h3>Use</h3><p>Anyone may use TradeGrid for personal, educational, testing or commercial work subject to the MIT License.</p><h3>Local records</h3><p>Core dashboard records are stored in your browser. You are responsible for backups and device security.</p><h3>Financial use</h3><p>TradeGrid is a record-keeping and calculation tool, not financial, tax, accounting, investment or legal advice.</p>`],
+ privacy:["Privacy",`<h3>Local-first</h3><p>TradeGrid does not require an account or backend for its core features. Records are saved in browser local storage.</p><h3>Backups</h3><p>Clearing browser data or changing devices can remove local records. Export important information regularly.</p>`]
 };
-document.querySelectorAll("[data-legal]").forEach(btn=>btn.addEventListener("click",()=>{
- const x=legalContent[btn.dataset.legal];document.querySelector("#legalEyebrow").textContent=x.eyebrow;document.querySelector("#legalTitle").textContent=x.title;document.querySelector("#legalBody").innerHTML=x.html;legalModal.showModal();
-}));
-document.querySelector("#closeLegal")?.addEventListener("click",()=>legalModal.close());
+$("#closeLegal").onclick=()=>$("#legal").close();document.querySelectorAll("[data-legal]").forEach(b=>b.onclick=()=>{$("#legalTitle").textContent=legal[b.dataset.legal][0];$("#legalBody").innerHTML=legal[b.dataset.legal][1];$("#legal").showModal()});
