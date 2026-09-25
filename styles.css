@@ -26,3 +26,6 @@ dialog{width:min(500px,92vw);padding:0;border:1px solid var(--line);border-radiu
 @media(max-width:1000px){.screen{min-height:auto;align-items:initial}.top-grid,.chart-grid,.tables,.bottom-row,.tools{grid-template-columns:1fr}}
 @media(max-width:680px){.topbar{height:auto;min-height:62px;padding:9px 14px}.brand small,.clock span:last-child,.currency{display:none}.screen{padding:20px 0}.screen-inner{width:calc(100% - 24px)}.intro,.section-head-wide{align-items:flex-start;flex-direction:column}.metric-row{grid-template-columns:1fr}.intro h1,.section-head-wide h1{font-size:21px}.chart,.main-chart-wrap,.chart-grid .chart{height:220px}.footer{align-items:flex-start;flex-direction:column}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+
+.currency{min-width:74px}
+.metric-label b span{color:var(--text);font-size:8px;margin-left:2px}

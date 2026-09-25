@@ -8,7 +8,33 @@ const $=s=>document.querySelector(s);
 const today=()=>new Date().toISOString().slice(0,10);
 const id=p=>p+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-function money(v){const n=Number(v)||0;const value=state.settings.currency==="INR"?n*state.settings.exchangeRate:n;return new Intl.NumberFormat(state.settings.currency==="INR"?"en-IN":"en-US",{style:"currency",currency:state.settings.currency,maximumFractionDigits:2}).format(value)}
+function money(v){
+  const n=Number(v)||0;
+  return new Intl.NumberFormat(state.settings.currency==="INR"?"en-IN":"en-US",{
+    style:"currency",
+    currency:state.settings.currency,
+    maximumFractionDigits:2
+  }).format(n);
+}
+function currencyMark(){return state.settings.currency==="INR"?"₹":"$"}
+function currencyName(){return state.settings.currency==="INR"?"Rupees (₹)":"US Dollars ($)"}
+
+function convertStoredAmounts(from,to){
+  if(from===to)return;
+  const rate=Number(state.settings.exchangeRate)||83.5;
+  const factor=from==="INR"&&to==="USD" ? 1/rate : rate;
+  const change=n=>Number(n||0)*factor;
+
+  state.accountBalance.amount=change(state.accountBalance.amount);
+  state.accountBalance.history.forEach(x=>x.change=change(x.change));
+
+  state.transactions.forEach(x=>x.amount=change(x.amount));
+
+  state.sales.forEach(x=>{
+    x.costPrice=change(x.costPrice);
+    x.sellingPrice=change(x.sellingPrice);
+  });
+}
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
 function toast(msg){const e=document.createElement("div");e.className="toast";e.textContent=msg;$("#toast-root").append(e);setTimeout(()=>e.remove(),2200)}
 
@@ -17,7 +43,18 @@ applyTheme();
 $("#currency").value=state.settings.currency;
 $("#today").textContent=new Date().toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"});
 $("#themeBtn").onclick=()=>{state.settings.theme=state.settings.theme==="dark"?"light":"dark";save();applyTheme();drawAll()};
-$("#currency").onchange=e=>{state.settings.currency=e.target.value;save();render();drawAll()};
+$("#currency").onchange=e=>{
+  const next=e.target.value;
+  const previous=state.settings.currency||"INR";
+  if(next!==previous){
+    convertStoredAmounts(previous,next);
+    state.settings.currency=next;
+    save();
+    render();
+    drawAll();
+    toast("All amounts switched to "+currencyName());
+  }
+};
 
 function dayRows(){
   const dates=rangeDays==="all"
@@ -40,6 +77,8 @@ function todayTotals(){const d=day(today());return {income:d.revenue+d.incoming,
 
 function render(){
   const t=todayTotals();
+  const currencyLabel=$("#balanceCurrency");
+  if(currencyLabel)currencyLabel.textContent=currencyMark();
   $("#balance").textContent=money(state.accountBalance.amount);
   $("#balanceHint").textContent=state.accountBalance.lastUpdated?"Tap to add money":"Set starting balance";
   $("#income").textContent=money(t.income);$("#expense").textContent=money(t.expense);$("#profit").textContent=money(t.profit);
@@ -78,8 +117,10 @@ $("#recurring").onclick=e=>{const b=e.target.closest("[data-rec]");if(!b)return;
 
 const modal=$("#modal");
 function formModal(title,eyebrow,fields,done){
-  $("#modalTitle").textContent=title;$("#modalEyebrow").textContent=eyebrow;
+  $("#modalTitle").textContent=title;
+  $("#modalEyebrow").textContent=eyebrow;
   $("#form").innerHTML=`<div class="modal-body">${fields.map(f=>`<div class="field"><label>${f.label}</label>${f.input}</div>`).join("")}<div class="form-actions"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn btn-solid">Save</button></div></div>`;
+  $("#form").querySelectorAll("[data-money-label]").forEach(el=>el.textContent=el.dataset.moneyLabel+" ("+currencyMark()+")");
   $("#cancel").onclick=()=>modal.close();$("#form").onsubmit=e=>{e.preventDefault();done(new FormData(e.currentTarget));modal.close()};modal.showModal();
 }
 $("#closeModal").onclick=()=>modal.close();
@@ -87,13 +128,13 @@ $("#closeModal").onclick=()=>modal.close();
 $("#balanceCard").onclick=()=>{
   if(!state.accountBalance.lastUpdated){
     formModal("Set starting balance","ACCOUNT",[
-      {label:"Starting balance",input:'<input name="amount" type="number" min="0" step=".01" required>'},
+      {label:'<span data-money-label="Starting balance">Starting balance</span>',input:'<input name="amount" type="number" min="0" step=".01" required>'},
       {label:"Note",input:'<input name="note" placeholder="e.g. Cash + bank balance">'}],fd=>{
         const a=Number(fd.get("amount"));state.accountBalance.amount=a;state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({date:state.accountBalance.lastUpdated,type:"starting",change:a,note:fd.get("note")});save();render();drawAll();toast("Balance saved");
       });
   }else{
     formModal("Add money","BALANCE · ADD ONLY",[
-      {label:"Amount received",input:'<input name="amount" type="number" min=".01" step=".01" required>'},
+      {label:'<span data-money-label="Amount received">Amount received</span>',input:'<input name="amount" type="number" min=".01" step=".01" required>'},
       {label:"Source",input:'<input name="note" placeholder="e.g. Money from family">'}],fd=>{
         const a=Number(fd.get("amount"));state.accountBalance.amount+=a;state.accountBalance.lastUpdated=new Date().toISOString();state.accountBalance.history.push({date:state.accountBalance.lastUpdated,type:"add",change:a,note:fd.get("note")});save();render();drawAll();toast("Money added");
       });
@@ -103,7 +144,7 @@ $("#balanceCard").onclick=()=>{
 $("#newTx").onclick=()=>formModal("Add transaction","CASH",[
  {label:"Type",input:'<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select>'},
  {label:"Category",input:'<select name="category"><option>Daily Use</option><option>Food</option><option>Travel</option><option>Inventory</option><option>Rent</option><option>Marketing</option><option>Utilities</option><option>Misc</option></select>'},
- {label:"Amount",input:'<input name="amount" type="number" min=".01" step=".01" required>'},
+ {label:'<span data-money-label="Amount">Amount</span>',input:'<input name="amount" type="number" min=".01" step=".01" required>'},
  {label:"Description",input:'<input name="description" placeholder="What happened?">'}],fd=>{
   const amount=Number(fd.get("amount")),type=fd.get("type");
   if(type==="expense"&&amount>state.accountBalance.amount){toast("Not enough balance");return}
@@ -112,7 +153,7 @@ $("#newTx").onclick=()=>formModal("Add transaction","CASH",[
 });
 
 $("#newSale").onclick=()=>formModal("Add sale","SALES",[
- {label:"Item",input:'<input name="item" required>'},{label:"Cost / unit",input:'<input name="cost" type="number" min="0" step=".01" required>'},{label:"Sell / unit",input:'<input name="sell" type="number" min="0" step=".01" required>'},{label:"Quantity",input:'<input name="qty" type="number" min="1" step="1" value="1" required>'}],fd=>{
+ {label:"Item",input:'<input name="item" required>'},{label:'<span data-money-label="Cost / unit">Cost / unit</span>',input:'<input name="cost" type="number" min="0" step=".01" required>'},{label:'<span data-money-label="Sell / unit">Sell / unit</span>',input:'<input name="sell" type="number" min="0" step=".01" required>'},{label:"Quantity",input:'<input name="qty" type="number" min="1" step="1" value="1" required>'}],fd=>{
  const d=new Date(),s={id:id("sale"),date:today(),time:d.toTimeString().slice(0,5),itemName:fd.get("item"),costPrice:Number(fd.get("cost")),sellingPrice:Number(fd.get("sell")),quantity:Number(fd.get("qty"))};state.sales.push(s);save();render();drawAll();toast("Sale added");
 });
 $("#newRecurring").onclick=()=>formModal("Add recurring task","SCHEDULE",[

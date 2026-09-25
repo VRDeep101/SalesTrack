@@ -18,7 +18,7 @@
   <div class="topbar-right">
     <div class="clock"><span class="live"></span><b id="clock">--:--:--</b><span id="date"></span></div>
     <button class="square-btn" id="themeBtn" title="Change theme">☾</button>
-    <select id="currency" class="currency">
+    <select id="currency" class="currency" title="All balance, income, expense and sales amounts use this currency">
       <option value="INR">₹ INR</option>
       <option value="USD">$ USD</option>
     </select>
@@ -39,7 +39,7 @@
 
       <div class="metric-row">
         <article class="metric clickable" id="balanceCard">
-          <div class="metric-label">CURRENT BALANCE <b>◉</b></div>
+          <div class="metric-label">CURRENT BALANCE <b>◉ <span id="balanceCurrency">₹</span></b></div>
           <div class="metric-number" id="balance">₹0.00</div>
           <div class="metric-bottom"><span id="balanceHint">Set starting balance</span><span class="plus">+</span></div>
         </article>
